@@ -38,6 +38,7 @@ class CloudEventMessageTest {
                 .correlationid("corr-abc-123")
                 .sourceeventid("lab-evt-789")
                 .facilityid("0002")
+                .facilityname("Kigali South Health Post")
                 .data(objectMapper.valueToTree(Map.of("resourceType", "Observation", "status", "final")))
                 .build();
 
@@ -53,6 +54,7 @@ class CloudEventMessageTest {
         assertEquals("corr-abc-123", node.get("correlationid").asText());
         assertEquals("lab-evt-789", node.get("sourceeventid").asText());
         assertEquals("0002", node.get("facilityid").asText());
+        assertEquals("Kigali South Health Post", node.get("facilityname").asText());
         assertEquals("Observation", node.get("data").get("resourceType").asText());
     }
 
@@ -79,6 +81,7 @@ class CloudEventMessageTest {
         assertFalse(node.has("protocoldefinitionid"));
         assertFalse(node.has("actionid"));
         assertFalse(node.has("facilityid"));
+        assertFalse(node.has("facilityname"));
     }
 
     @Test
@@ -95,6 +98,7 @@ class CloudEventMessageTest {
                   "correlationid": "corr-round-trip",
                   "actionid": "blood-pressure-check",
                   "facilityid": "0003",
+                  "facilityname": "Kacyiru Health Center",
                   "data": {
                     "resourceType": "Observation",
                     "code": { "coding": [{ "system": "http://loinc.org", "code": "85354-9" }] }
@@ -113,6 +117,7 @@ class CloudEventMessageTest {
         assertEquals("corr-round-trip", msg.getCorrelationid());
         assertEquals("blood-pressure-check", msg.getActionid());
         assertEquals("0003", msg.getFacilityid());
+        assertEquals("Kacyiru Health Center", msg.getFacilityname());
         assertNull(msg.getProtocolinstanceid());
         assertNull(msg.getProtocoldefinitionid());
         assertNull(msg.getSourceeventid());
