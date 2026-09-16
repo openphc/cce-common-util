@@ -32,8 +32,8 @@ public class SlaThresholdReader {
     }
 
     /**
-     * A step's SLA thresholds. Either may be null — a step created from its own trigger has no
-     * tolerance window, and an event-driven step may have no missed date.
+     * A step's SLA thresholds. Either may be null: an action with no {@code tolerance-days} has no
+     * missed date, and an optional step has no schedule at all.
      *
      * @param dueDate    when the SLA goes {@code OVERDUE}, or null if it never does
      * @param missedDate when the SLA is settled as {@code MISSED}, or null if it never is
@@ -56,6 +56,9 @@ public class SlaThresholdReader {
             switch (row.getTransitionType()) {
                 case DUE_DATE_REACHED -> dueDate = row.getProcessBy();
                 case MISSED_DATE_REACHED -> missedDate = row.getProcessBy();
+                // MET_CONDITION_REACHED carries a completion, not a threshold, so it is no part of
+                // what a step was due by.
+                case MET_CONDITION_REACHED -> { }
             }
         }
         return new SlaThresholds(dueDate, missedDate);
