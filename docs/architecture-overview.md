@@ -9,7 +9,7 @@ them restates what is here.
 |---|---|
 | **cce-protocol-service** | The definitional plane. Loads FHIR PlanDefinitions and ActivityDefinitions, builds the trigger index. |
 | **cce-matcher-service** | The event plane. Matches inbound clinical events, enrols patients, creates and completes steps. |
-| **cce-step-sla-service** | The time plane. Applies SLA transitions as deadlines pass, records the resulting deviations.
+| **cce-step-sla-service** | The time plane. Applies SLA transitions as deadlines pass, records the resulting deviations. |
 | **cce-common-util** | This library. Shared entities, repositories, FHIR parsing, and the services that operate on them. |
 
 ---
@@ -211,11 +211,18 @@ written on that row alone, and only over a null.
 Writes are **forward-only**: `MET` and `MISSED` are settled outcomes, and `OVERDUE` never replaces
 `MISSED` — which is what a retry applying two rows out of order would otherwise do.
 
-A `MISSED` deviation is **`must`-only**, and so is the `MISSED` status. An optional (`could`) step is
-left alone by its missed threshold on both paths — never arrived and recorded late alike. Nothing was
-required of it, and exempting only the step that never arrived would penalise optional work done late
-more heavily than optional work not done at all. The exemption is `MISSED`-only: an optional step still
-takes an `OVERDUE` for passing its due date, because running late is a reportable fact about it.
+**Only mandatory steps have deadlines.** A breach is a deadline missed, and nothing is required of an
+optional step — so it can be neither `OVERDUE` nor `MISSED`. Matcher writes no
+`step_sla_state_transition` row for one (`StepSlaScheduleService.schedule`), and the Protocol Service
+rejects a PlanDefinition whose optional action declares `tolerance-days`
+(`PlanDefinitionParser.validateOptionalStepDeadlines`). A row for an optional step can therefore only
+predate those rules: the applier consumes it, recording no status and no deviation on either path —
+never arrived and recorded late alike.
+
+Mandatory is `requiredBehavior == "must"` and nothing else; an absent value states no requirement.
+`RequiredBehavior.isMandatory` is the one definition, shared by progressive instantiation, SLA
+scheduling and the SLA judgement. `MET` is untouched by this: it is not a breach, and is settled from
+the step's own `due_date`.
 
 The applier never writes `step_status`.
 
