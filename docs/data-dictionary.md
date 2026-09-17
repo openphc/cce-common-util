@@ -601,6 +601,8 @@ Only triggers that contain a `data[]` section produce `trigger_index` entries. *
 | `protocol_definition_id` | `UUID` | **NOT NULL** | — | Foreign key → `protocol_definition.id`. |
 | `action_id` | `VARCHAR` | **NOT NULL** | — | Protocol definition `action.id` this trigger belongs to. All steps (including those originally nested in `action.action[]`) use their plain action ID — the flat model treats all steps uniformly. |
 
+Each `TriggerPath` member also carries a `shape()` — `CODEABLE_CONCEPT`, `CODEABLE_CONCEPT_ARRAY`, `CODING`, `IDENTIFIER_ARRAY`, or `PLAIN_STRING` — which is what tells `EventCodesExtractor` how to read a value out of that field. Most single-object paths are a `CodeableConcept` (`{"coding": [...], "text": ...}`), but `class` is a bare `Coding` (`{"system": ..., "code": ..., "display": ...}` directly, no `coding[]` wrapper) — `Encounter.class` really is typed that way in FHIR R4, unlike `Encounter.type`/`serviceType`/`clinicalStatus`/`verificationStatus`, which are genuine CodeableConcepts. `DataRequirement.codeFilter` is defined against both shapes, so a path is never assumed to be one or the other — get this wrong for a path and its trigger silently never matches, exactly like the "path present but not extracted" trap this whole enum exists to prevent (see the note at the top of `TriggerPath.java`).
+
 ### Constraints & Indexes
 
 | Type | Name | Details |

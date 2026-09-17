@@ -27,8 +27,8 @@ public enum TriggerPath {
     /** {@code Observation.code}, {@code Procedure.code}, … */
     CODE("code", Shape.CODEABLE_CONCEPT),
 
-    /** {@code Encounter.class} — the encounter classification. */
-    CLASS("class", Shape.CODEABLE_CONCEPT),
+    /** {@code Encounter.class} — the encounter classification. A bare {@code Coding}, not a {@code CodeableConcept} — see {@link Shape#CODING}. */
+    CLASS("class", Shape.CODING),
 
     /** {@code Encounter.serviceType} — the service the encounter delivered. */
     SERVICE_TYPE("serviceType", Shape.CODEABLE_CONCEPT),
@@ -60,6 +60,13 @@ public enum TriggerPath {
         CODEABLE_CONCEPT,
         /** An array of CodeableConcepts, falling back to a single one where the field is 0..1. */
         CODEABLE_CONCEPT_ARRAY,
+        /**
+         * A bare Coding — {@code system}/{@code code}/{@code display} directly on the field, with no
+         * wrapping {@code coding[]} array. FHIR R4's {@code DataRequirement.codeFilter} is defined
+         * against Coding, CodeableConcept, code, or Quantity — not CodeableConcept-only — and some
+         * codeFilter-eligible fields (e.g. {@code Encounter.class}) really are a bare Coding.
+         */
+        CODING,
         /** An array of Identifiers: read {@code system} and {@code value}. */
         IDENTIFIER_ARRAY,
         /** A bare string, indexed with an empty system. */
