@@ -559,7 +559,7 @@ Records **protocol deviations** — three kinds, written by two services.
 
 When intelligence actions are configured on the step's PlanDefinition action, the `IntelligenceActionEvaluator` is invoked and the `intelligence_event_id` is populated with the published event's UUID.
 
-A step has **at most one deviation per type** — enforced by the `deviation_step_type_key` unique constraint on `(step_instance_id, deviation_type)`. This makes deviation creation idempotent against a retried evaluation and concurrent threads: `DeviationRecorder.recordDeviation` pre-checks for an existing deviation and returns it instead of inserting a duplicate, with the unique constraint as the ultimate backstop. It returns a `DeviationResult(deviation, created)`; the `created` flag lets callers fire one-time side effects (intelligence action evaluation) **only** when a new deviation was actually inserted, so a redelivered or concurrent trigger produces neither a duplicate deviation row nor a duplicate intelligence event.
+A step has **at most one deviation per type** — enforced by the `deviation_step_type_key` unique constraint on `(step_instance_id, deviation_type)`. No writer can reach the same (step, type) twice: `OVERDUE` and `MISSED` are raised only when their `sla_status` write succeeds, which `SlaStatus.canReplace` allows once, and `ORDER_VIOLATION` only when a step completes, which it does once. So `DeviationRecorder` inserts without looking for an existing row, and the constraint is the guarantee — a duplicate means one of those rules broke, and it fails the transaction rather than being skipped. Callers evaluate intelligence actions for every deviation recorded, since each one is new.
 
 ### Columns
 
@@ -579,7 +579,7 @@ A step has **at most one deviation per type** — enforced by the `deviation_ste
 |------|------|---------|
 | Primary Key | `deviation_pkey` | `id` |
 | Foreign Key | `deviation_step_instance_id_fkey` | `step_instance_id` → `step_instance(id)` |
-| Unique | `deviation_step_type_key` | `(step_instance_id, deviation_type)` — At most one deviation per type per step. Idempotency guard against a retried evaluation or concurrent writers. Note it permits one `OVERDUE` **and** one `MISSED` row per step, so a step that goes overdue and is later missed yields two deviations. |
+| Unique | `deviation_step_type_key` | `(step_instance_id, deviation_type)` — At most one deviation per type per step. The only enforcement: `DeviationRecorder` does not pre-check. Note it permits one `OVERDUE` **and** one `MISSED` row per step, so a step that goes overdue and is later missed yields two deviations. |
 | Check | — | `deviation_type IN ('OVERDUE', 'MISSED', 'ORDER_VIOLATION')` |
 
 ---
@@ -761,6 +761,12 @@ Other properties they share:
   joining the base tables. Trade-off: a hard-deleted base row leaves its history ungroupable, and it
   drops out of the backfill. Accepted — a deleted instance is treated as removed from historical
   rollups too.
+- **Ids allocated in blocks.** The entities draw ids from the `<table>_id_seq` sequence 50 at a time
+  (Hibernate's pooled optimizer), and the sequence steps by 50 to match (Matcher `V6`), so a batch of
+  history rows is inserted as one JDBC batch instead of one round trip each. Each service instance
+  takes its own block, so ids from different writers interleave out of insert order: order history by
+  `changed_at`, never by `id`. Hibernate refuses to start if the sequence's increment and the allocation
+  size disagree.
 - Consumed **only** by the historical-backfill job (`data-pipeline/schema/09-historical-backfill.sql`),
   run after a full re-snapshot. Normal forward operation never reads them.
 
@@ -768,7 +774,7 @@ Other properties they share:
 
 | Column | Data Type | Nullable | Default | Description |
 |--------|-----------|----------|---------|-------------|
-| `id` | `BIGSERIAL` | **NOT NULL** | sequence | Primary key, and insertion order. |
+| `id` | `BIGSERIAL` | **NOT NULL** | sequence | Primary key. Unique, but **not** insertion order — see *Ids allocated in blocks* above. |
 | `protocol_instance_id` | `UUID` | **NOT NULL** | — | The enrolment whose status changed. No FK. Backfill joins `protocol_instance` on it to recover `protocol_definition_id`. |
 | `status` | `VARCHAR` | **NOT NULL** | — | The status *after* this transition. See [ProtocolInstanceStatus](#protocolinstancestatus). |
 | `changed_at` | `TIMESTAMPTZ` | **NOT NULL** | `now()` | When the transition took effect. Caller-supplied rather than stamped on insert: the initial row receives `protocol_instance.enrolled_at`, which is the clinical occurrence time of the enrolling event, not the moment the row was written. |
@@ -781,7 +787,7 @@ Other properties they share:
 
 | Column | Data Type | Nullable | Default | Description |
 |--------|-----------|----------|---------|-------------|
-| `id` | `BIGSERIAL` | **NOT NULL** | sequence | Primary key, and insertion order. |
+| `id` | `BIGSERIAL` | **NOT NULL** | sequence | Primary key. Unique, but **not** insertion order — see *Ids allocated in blocks* above. |
 | `step_instance_id` | `UUID` | **NOT NULL** | — | The step whose state changed. No FK. Backfill joins `step_instance` on it to recover `protocol_instance_id`. |
 | `step_status` | `VARCHAR` | **NOT NULL** | — | The step status *after* this transition. See [StepStatus](#stepstatus). Written by the Matcher Service. |
 | `sla_status` | `VARCHAR` | Yes | — | The SLA status *after* this transition. See [SlaStatus](#slastatus). **Nullable**, mirroring the column it copies: null on any row recorded before a threshold had fallen due, and on every row of a step with no SLA. Written by the Step SLA Service. |
@@ -835,6 +841,8 @@ Did the expected clinical event arrive? Independent of timeliness.
 
 Was the deadline met? Independent of whether the work was recorded. Only a null status and `OVERDUE`
 are live — a step in `MET` or `MISSED` has no threshold left to cross and is never advanced again.
+The transitions below are held on the enum itself (`SlaStatus.canReplace`), so a writer asks it rather
+than restating them.
 
 Evaluated against `completed_at` (the **clinical occurrence time** of the completing event — see
 clinical event time extraction, in the Matcher Service repo), so timeliness
