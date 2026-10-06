@@ -238,12 +238,12 @@ erDiagram
 | 13 | `inbound_event_log` ‡ | Every CloudEvent the Collector Service accepted or rejected, with its raw payload — the ingestion audit trail and deduplication key | High (every event) |
 
 † Columns documented in the Matcher Service repo
-([`matcher_event_log`](../../cce-matcher-service/docs/data-dictionary.md#2-matcher_event_log),
-[`facility`](../../cce-matcher-service/docs/data-dictionary.md#3-facility)), which is where their
+([`matcher_event_log`](https://github.com/openphc/cce-matcher-service/blob/release-2.0.0/docs/data-dictionary.md#2-matcher_event_log),
+[`facility`](https://github.com/openphc/cce-matcher-service/blob/release-2.0.0/docs/data-dictionary.md#3-facility)), which is where their
 entities live.
 
 ‡ Columns documented in the
-[Collector Service repo](../../cce-collector-service/docs/data-dictionary.md#1-database-tables).
+[Collector Service repo](https://github.com/openphc/cce-collector-service/blob/release-2.0.0/docs/data-dictionary.md#1-database-tables).
 
 Everything else on this page covers rows 1-10.
 
